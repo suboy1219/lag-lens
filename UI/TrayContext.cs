@@ -129,8 +129,8 @@ public sealed class TrayContext : ApplicationContext
         Verdict verdict = Diagnoser.Evaluate(snapshot);
         int unread = _sampler.Store.UnreadCount;
 
-        // 不弹窗、不弹通知：有新卡顿记录时，托盘图标保持红色，直到用户点开面板。
-        _tray.Icon = IconFactory.Create(unread > 0 ? Theme.Danger : Theme.forSeverity(verdict.Severity));
+        // 颜色始终反映当前负载；历史未读记录只在提示中显示，避免恢复后一直红色。
+        _tray.Icon = IconFactory.Create(Theme.forSeverity(verdict.Severity));
 
         string tip = unread > 0
             ? $"卡顿侦探 · {unread} 条卡顿记录未查看 · CPU {snapshot.CpuTotal:0}% · 硬盘 {snapshot.DiskBusy:0}%"

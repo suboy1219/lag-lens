@@ -118,7 +118,7 @@ public sealed class StatusPopup : Form
             area.Right - Width - Scale(12),
             area.Bottom - Height - Scale(12));
 
-        // 打开面板 = 已读，托盘图标随之恢复常态。
+        // 打开面板 = 已读，清除托盘提示中的未查看计数。
         _sampler.Store.MarkSeen();
 
         Show();

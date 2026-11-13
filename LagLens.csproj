@@ -10,7 +10,7 @@
     <RootNamespace>LagLens</RootNamespace>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationDefaultFont>Microsoft YaHei UI, 9pt</ApplicationDefaultFont>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <AssemblyTitle>卡顿侦探</AssemblyTitle>
     <Product>卡顿侦探 (LagLens)</Product>
     <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>

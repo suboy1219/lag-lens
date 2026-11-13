@@ -22,7 +22,7 @@ So LagLens samples every second, keeps the last 60 seconds in memory, and record
 - **Three live metrics**: CPU usage, busiest physical disk utilization, available memory
 - **Pausable 60-second chart**: hover to preview any second, click to pause the whole panel on that moment; press "Resume live" or `Esc` to continue
 - **Top 5 apps** aggregated by process name, so `Code ×12` counts all 12 processes together; click any row to reveal the program in Explorer
-- **The tray icon is the status**: green = fine, orange = busy, red = struggling; it **stays red while an incident is unread**
+- **The tray icon is the status**: updated every second from the current load; green = fine, orange = busy, red = struggling. Its color recovers automatically, and unread incidents appear in the tooltip
 - **No popups, ever**: it never steals focus, it only changes the tray color
 - **Automatic incident log**: freezes and sustained high pressure are written to disk; the panel shows the latest three
 - **Click to locate**: click any incident to open the culprit's folder in Explorer with the exe selected
@@ -73,7 +73,7 @@ If several thresholds are crossed, the one furthest past its threshold becomes t
 2. Left click: toggle the panel; `Esc` or `×` closes it. While the panel is open, hover the chart to preview any second and click to pause; use "Resume live" or the first `Esc` to continue, the second `Esc` closes the panel. Clicking a top-5 row reveals the program in Explorer.
 3. Right click: open panel / start with Windows / open Resource Monitor / exit.
 
-Opening the panel marks incidents as read and the icon returns to its normal color. No administrator rights required. Windows 10 / 11 x64.
+Opening the panel marks incidents as read and clears the unread count from the tray tooltip; the icon color always follows the current load. No administrator rights required. Windows 10 / 11 x64.
 
 Autostart is a per-user value at `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\LagLens`; unchecking the menu item removes it.
 
