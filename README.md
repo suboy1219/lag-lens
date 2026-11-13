@@ -2,7 +2,7 @@
 
 常驻 Windows 托盘的小工具。电脑突然卡的时候点一下托盘图标，直接告诉你**是谁**在吃资源、**是 CPU 还是硬盘**扛不住了。
 
-![卡顿面板](docs/images/panel-freeze.png)
+![卡顿面板](docs/images/demo-panel-freeze.png)
 
 **中文** · [English](README.en.md)
 
@@ -33,8 +33,8 @@
 卡死之后打开面板，会直接显示刚才卡了几秒、当时是谁在占资源（见顶部截图）。另外两个典型场景：
 
 <p align="center">
-  <img src="docs/images/panel-cpu.png" width="420" alt="CPU 被吃满了">
-  <img src="docs/images/panel-disk.png" width="420" alt="硬盘扛不住了">
+  <img src="docs/images/demo-panel-cpu.png" width="420" alt="CPU 被吃满了">
+  <img src="docs/images/demo-panel-disk.png" width="420" alt="硬盘扛不住了">
 </p>
 
 托盘图标的三种状态：

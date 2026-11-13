@@ -2,7 +2,7 @@
 
 A tiny Windows tray app for the moment your PC suddenly stutters. Click the tray icon and it tells you **who** is hogging the machine and **whether the CPU or the disk** is the bottleneck.
 
-![LagLens panel](docs/images/panel-freeze.png)
+![LagLens panel](docs/images/demo-panel-freeze.png)
 
 [中文](README.md) · **English**
 
@@ -33,8 +33,8 @@ So LagLens samples every second, keeps the last 60 seconds in memory, and record
 After a freeze, opening the panel shows how long it lasted and who was responsible (see the screenshot above). Two typical bottlenecks:
 
 <p align="center">
-  <img src="docs/images/panel-cpu.png" width="420" alt="CPU maxed out">
-  <img src="docs/images/panel-disk.png" width="420" alt="Disk can't keep up">
+  <img src="docs/images/demo-panel-cpu.png" width="420" alt="CPU maxed out">
+  <img src="docs/images/demo-panel-disk.png" width="420" alt="Disk can't keep up">
 </p>
 
 The three tray states:
