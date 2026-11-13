@@ -20,8 +20,8 @@ So LagLens samples every second, keeps the last 60 seconds in memory, and record
 
 - **One-line verdict**: `Disk can't keep up` / `CPU is maxed out` / `Running out of memory` / `Everything looks smooth`
 - **Three live metrics**: CPU usage, busiest physical disk utilization, available memory
-- **60-second chart** for CPU and disk utilization
-- **Top 5 apps** aggregated by process name, so `Code ×12` counts all 12 processes together
+- **Pausable 60-second chart**: hover to preview any second, click to pause the whole panel on that moment; press "Resume live" or `Esc` to continue
+- **Top 5 apps** aggregated by process name, so `Code ×12` counts all 12 processes together; click any row to reveal the program in Explorer
 - **The tray icon is the status**: green = fine, orange = busy, red = struggling; it **stays red while an incident is unread**
 - **No popups, ever**: it never steals focus, it only changes the tray color
 - **Automatic incident log**: freezes and sustained high pressure are written to disk; the panel shows the latest three
@@ -70,7 +70,7 @@ If several thresholds are crossed, the one furthest past its threshold becomes t
 ## Usage
 
 1. Double-click `LagLens.exe`; the icon appears in the notification area.
-2. Left click: toggle the panel; `Esc` or `×` closes it.
+2. Left click: toggle the panel; `Esc` or `×` closes it. While the panel is open, hover the chart to preview any second and click to pause; use "Resume live" or the first `Esc` to continue, the second `Esc` closes the panel. Clicking a top-5 row reveals the program in Explorer.
 3. Right click: open panel / start with Windows / open Resource Monitor / exit.
 
 Opening the panel marks incidents as read and the icon returns to its normal color. No administrator rights required. Windows 10 / 11 x64.

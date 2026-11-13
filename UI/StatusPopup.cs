@@ -20,6 +20,7 @@ public sealed class StatusPopup : Form
     private static readonly RectangleF BannerRect = new(14, 50, BaseWidth - 28, 76);
     private static readonly RectangleF ChartRect = new(14, 208, BaseWidth - 28, 64);
     private static readonly RectangleF ResmonRect = new(BaseWidth - 122, 552, 108, 22);
+    private static readonly RectangleF ResumeRect = new(16, 550, 78, 24);
 
     private static readonly Font TitleFont = new("Microsoft YaHei UI", 10.5f, FontStyle.Bold);
     private static readonly Font BigFont = new("Microsoft YaHei UI", 14.5f, FontStyle.Bold);
@@ -37,6 +38,11 @@ public sealed class StatusPopup : Form
         Alignment = StringAlignment.Far,
     };
     private static readonly StringFormat Wrap = new(StringFormatFlags.LineLimit) { Trimming = StringTrimming.EllipsisWord };
+    private static readonly StringFormat CenterFmt = new(StringFormatFlags.NoWrap)
+    {
+        Alignment = StringAlignment.Center,
+        LineAlignment = StringAlignment.Center,
+    };
 
     private readonly Sampler _sampler;
     private readonly System.Windows.Forms.Timer _timer;
@@ -44,8 +50,14 @@ public sealed class StatusPopup : Form
     private DateTime _lastPaintAt = DateTime.UtcNow;
     private bool _hoverClose;
     private bool _hoverResmon;
+    private bool _hoverResume;
     private int _hoverIncident = -1;
+    private int _hoverRow = -1;
+    private int _hoverChart = -1;
+    private Snapshot[]? _pausedHistory;
+    private DateTime? _pausedAt;
     private readonly List<(IncidentRecord Record, RectangleF Rect)> _incidentRects = new();
+    private readonly List<(ProcessGroup Group, RectangleF Rect)> _rowRects = new();
     private string? _notice;
     private DateTime _noticeUntil;
 
@@ -136,6 +148,10 @@ public sealed class StatusPopup : Form
         if (!Visible)
         {
             LastHiddenAt = DateTime.UtcNow;
+            _pausedHistory = null;
+            _pausedAt = null;
+            _hoverChart = -1;
+            _hoverRow = -1;
         }
     }
 
@@ -143,8 +159,15 @@ public sealed class StatusPopup : Form
     {
         if (e.KeyCode == Keys.Escape)
         {
-            Hide();
-            _timer.Stop();
+            if (_pausedHistory is not null)
+            {
+                ResumeLive();
+            }
+            else
+            {
+                Hide();
+                _timer.Stop();
+            }
         }
 
         base.OnKeyDown(e);
@@ -157,14 +180,29 @@ public sealed class StatusPopup : Form
         PointF p = ToBase(e.Location);
         bool overClose = CloseRect.Contains(p);
         bool overResmon = ResmonRect.Contains(p);
+        bool overResume = _pausedHistory is not null && ResumeRect.Contains(p);
         int overIncident = HitIncident(p);
+        int overRow = HitRow(p);
+        int overChart = ChartIndexAt(p, ChartCount());
 
-        if (overClose != _hoverClose || overResmon != _hoverResmon || overIncident != _hoverIncident)
+        if (overClose != _hoverClose
+            || overResmon != _hoverResmon
+            || overResume != _hoverResume
+            || overIncident != _hoverIncident
+            || overRow != _hoverRow
+            || overChart != _hoverChart)
         {
             _hoverClose = overClose;
             _hoverResmon = overResmon;
+            _hoverResume = overResume;
             _hoverIncident = overIncident;
-            Cursor = overClose || overResmon || overIncident >= 0 ? Cursors.Hand : Cursors.Default;
+            _hoverRow = overRow;
+            _hoverChart = overChart;
+            Cursor = overChart >= 0
+                ? Cursors.Cross
+                : overClose || overResmon || overResume || overIncident >= 0 || overRow >= 0
+                    ? Cursors.Hand
+                    : Cursors.Default;
             Invalidate();
         }
     }
@@ -172,8 +210,10 @@ public sealed class StatusPopup : Form
     protected override void OnMouseLeave(EventArgs e)
     {
         base.OnMouseLeave(e);
-        _hoverClose = _hoverResmon = false;
+        _hoverClose = _hoverResmon = _hoverResume = false;
         _hoverIncident = -1;
+        _hoverRow = -1;
+        _hoverChart = -1;
         Cursor = Cursors.Default;
         Invalidate();
     }
@@ -196,11 +236,38 @@ public sealed class StatusPopup : Form
             return;
         }
 
+        if (e.Button == MouseButtons.Left && _pausedHistory is not null && ResumeRect.Contains(p))
+        {
+            ResumeLive();
+            return;
+        }
+
         int incident = HitIncident(p);
         if (e.Button == MouseButtons.Left && incident >= 0)
         {
             OpenIncidentLocation(_incidentRects[incident].Record);
             return;
+        }
+
+        int row = HitRow(p);
+        if (e.Button == MouseButtons.Left && row >= 0)
+        {
+            OpenAppLocation(_rowRects[row].Group);
+            return;
+        }
+
+        if (e.Button == MouseButtons.Left)
+        {
+            IReadOnlyList<Snapshot> history = _pausedHistory ?? _sampler.History();
+            int hit = ChartIndexAt(p, history.Count);
+            if (hit >= 0)
+            {
+                _pausedHistory ??= history.ToArray();
+                _pausedAt = _pausedHistory[hit].At;
+                _hoverChart = hit;
+                Invalidate();
+                return;
+            }
         }
 
         if (e.Button == MouseButtons.Left && p.Y < 44)
@@ -212,11 +279,55 @@ public sealed class StatusPopup : Form
 
     private PointF ToBase(Point p) => new(p.X / _scale, p.Y / _scale);
 
+    /// <summary>当前时间轴上的样本数：暂停后看冻结的副本，否则看实时历史。</summary>
+    private int ChartCount() => _pausedHistory?.Length ?? _sampler.History().Count;
+
+    private void ResumeLive()
+    {
+        _pausedHistory = null;
+        _pausedAt = null;
+        _hoverChart = -1;
+        _hoverResume = false;
+        Cursor = Cursors.Default;
+        Invalidate();
+    }
+
+    /// <summary>曲线上的横坐标换算成采样下标；不在曲线区域内返回 -1。</summary>
+    private static int ChartIndexAt(PointF p, int count)
+    {
+        if (count < 2)
+        {
+            return -1;
+        }
+
+        if (p.X < ChartRect.X - 2 || p.X > ChartRect.Right + 2
+            || p.Y < ChartRect.Y - 2 || p.Y > ChartRect.Bottom + 2)
+        {
+            return -1;
+        }
+
+        float ratio = Math.Clamp((p.X - ChartRect.X) / ChartRect.Width, 0f, 1f);
+        return (int)Math.Round(ratio * (count - 1));
+    }
+
     private int HitIncident(PointF p)
     {
         for (int i = 0; i < _incidentRects.Count; i++)
         {
             if (_incidentRects[i].Rect.Contains(p))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private int HitRow(PointF p)
+    {
+        for (int i = 0; i < _rowRects.Count; i++)
+        {
+            if (_rowRects[i].Rect.Contains(p))
             {
                 return i;
             }
@@ -271,8 +382,35 @@ public sealed class StatusPopup : Form
         Snapshot? s = _sampler.Latest;
         _lastPaintAt = DateTime.UtcNow;
         _incidentRects.Clear();
+        _rowRects.Clear();
         IReadOnlyList<Snapshot> history = _sampler.History();
         FreezeEvent? freeze = _sampler.LastFreeze();
+
+        // 点击曲线后时间轴冻结：曲线、指标和 Top5 都停在那一刻，直到点“恢复实时”。
+        bool paused = _pausedHistory is not null;
+        Snapshot? view = s;
+        DateTime? viewingAt = null;
+        if (_pausedHistory is Snapshot[] frozen)
+        {
+            Snapshot? found = _pausedAt is DateTime at ? FindSnapshot(frozen, at) : null;
+            if (found is null)
+            {
+                _pausedHistory = null;
+                _pausedAt = null;
+                paused = false;
+            }
+            else
+            {
+                history = frozen;
+                view = found;
+                viewingAt = view.At;
+            }
+        }
+        else if (_hoverChart >= 0 && _hoverChart < history.Count)
+        {
+            view = history[_hoverChart];
+            viewingAt = view.At;
+        }
 
         using (var bg = new SolidBrush(Theme.Bg))
         {
@@ -284,18 +422,19 @@ public sealed class StatusPopup : Form
             Theme.DrawRound(g, border, new RectangleF(0.5f, 0.5f, BaseWidth - 1, BaseHeight - 1), 14);
         }
 
-        DrawHeader(g, s);
+        DrawHeader(g, view);
 
-        if (s is null)
+        if (view is null)
         {
             DrawText(g, "正在采集第一秒数据…", BodyFont, Theme.TextSecondary, new RectangleF(20, 60, 380, 24), LeftFmt);
             return;
         }
 
-        Verdict verdict = Diagnoser.Evaluate(s);
+        Verdict verdict = Diagnoser.Evaluate(view);
         bool freezeAsHeadline = false;
 
         if (freeze is not null
+            && viewingAt is null
             && (DateTime.Now - freeze.At).TotalMinutes < 10
             && verdict.Severity == Severity.Ok)
         {
@@ -310,12 +449,25 @@ public sealed class StatusPopup : Form
                 $"{freeze.At:HH:mm:ss} {culpritText}");
             freezeAsHeadline = true;
         }
-        DrawBanner(g, verdict);
-        DrawChips(g, s);
-        DrawChart(g, history);
-        DrawRows(g, s, verdict);
+        DrawBanner(g, verdict, viewingAt is not null);
+        DrawChips(g, view);
+        DrawChart(g, history, viewingAt, paused);
+        DrawRows(g, view, verdict, viewingAt is not null);
         DrawIncidents(g);
-        DrawFooter(g, freezeAsHeadline, s);
+        DrawFooter(g, freezeAsHeadline, view, paused);
+    }
+
+    private static Snapshot? FindSnapshot(IReadOnlyList<Snapshot> history, DateTime at)
+    {
+        for (int i = history.Count - 1; i >= 0; i--)
+        {
+            if (Math.Abs((history[i].At - at).TotalMilliseconds) < 500)
+            {
+                return history[i];
+            }
+        }
+
+        return null;
     }
 
     private void DrawHeader(Graphics g, Snapshot? s)
@@ -336,9 +488,10 @@ public sealed class StatusPopup : Form
             new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center });
     }
 
-    private void DrawBanner(Graphics g, Verdict verdict)
+    private void DrawBanner(Graphics g, Verdict verdict, bool history)
     {
         Color color = Theme.forSeverity(verdict.Severity);
+        string title = history ? verdict.Title.Replace("当前", "当时") : verdict.Title;
 
         using (var fill = new SolidBrush(Color.FromArgb(30, color)))
         {
@@ -354,7 +507,7 @@ public sealed class StatusPopup : Form
             g.Restore(state);
         }
 
-        DrawText(g, verdict.Title, BigFont, color,
+        DrawText(g, title, BigFont, color,
             new RectangleF(BannerRect.X + 16, BannerRect.Y + 8, BannerRect.Width - 28, 26), LeftFmt);
 
         DrawText(g, verdict.Detail, BodyFont, Theme.TextSecondary,
@@ -405,9 +558,13 @@ public sealed class StatusPopup : Form
         }
     }
 
-    private void DrawChart(Graphics g, IReadOnlyList<Snapshot> history)
+    private void DrawChart(Graphics g, IReadOnlyList<Snapshot> history, DateTime? viewingAt, bool paused)
     {
-        DrawText(g, "最近 60 秒", SmallFont, Theme.TextSecondary, new RectangleF(14, 190, 100, 16), LeftFmt);
+        string label = viewingAt is DateTime at
+            ? (paused ? $"已暂停 · {at:HH:mm:ss}" : $"回看 {at:HH:mm:ss}")
+            : "最近 60 秒";
+        DrawText(g, label, SmallFont, viewingAt is null ? Theme.TextSecondary : Theme.Accent,
+            new RectangleF(14, 190, 160, 16), LeftFmt);
 
         using (var legend = new SolidBrush(Theme.Accent))
         {
@@ -445,6 +602,83 @@ public sealed class StatusPopup : Form
 
         DrawSeries(g, history.Select(x => x.CpuTotal).ToArray(), Theme.Accent, fillArea: true);
         DrawSeries(g, history.Select(x => x.DiskBusy).ToArray(), Theme.Warn, fillArea: false);
+
+        if (viewingAt is DateTime selected)
+        {
+            for (int i = 0; i < history.Count; i++)
+            {
+                if (Math.Abs((history[i].At - selected).TotalMilliseconds) < 500)
+                {
+                    DrawChartCursor(g, history, i);
+                    break;
+                }
+            }
+        }
+    }
+
+    private void DrawChartCursor(Graphics g, IReadOnlyList<Snapshot> history, int index)
+    {
+        if (history.Count < 2 || index < 0 || index >= history.Count)
+        {
+            return;
+        }
+
+        Snapshot s = history[index];
+        float stepX = ChartRect.Width / (history.Count - 1);
+        float x = ChartRect.X + (index * stepX);
+
+        using (var line = new Pen(Color.FromArgb(110, 255, 255, 255), 1f) { DashStyle = DashStyle.Dash })
+        {
+            g.DrawLine(line, x, ChartRect.Y + 1, x, ChartRect.Bottom - 1);
+        }
+
+        DrawChartDot(g, x, s.CpuTotal, Theme.Accent);
+        DrawChartDot(g, x, s.DiskBusy, Theme.Warn);
+
+        string text = _pausedHistory is null
+            ? $"CPU {s.CpuTotal:0}% · 磁盘 {s.DiskBusy:0}% · 点击暂停"
+            : $"CPU {s.CpuTotal:0}% · 磁盘 {s.DiskBusy:0}%";
+        SizeF size = g.MeasureString(text, TinyFont);
+        float w = size.Width + 14;
+        const float h = 20;
+        float bx = x + 8;
+        if (bx + w > ChartRect.Right - 3)
+        {
+            bx = x - w - 8;
+        }
+
+        bx = Math.Clamp(bx, ChartRect.X + 3, ChartRect.Right - w - 3);
+        var box = new RectangleF(bx, ChartRect.Y + 4, w, h);
+
+        using (var fill = new SolidBrush(Color.FromArgb(238, 18, 20, 25)))
+        {
+            Theme.FillRound(g, fill, box, 5);
+        }
+
+        using (var border = new Pen(Color.FromArgb(70, 255, 255, 255)))
+        {
+            Theme.DrawRound(g, border, box, 5);
+        }
+
+        DrawText(g, text, TinyFont, Theme.TextPrimary,
+            new RectangleF(box.X + 7, box.Y + 4, box.Width - 14, box.Height - 6), LeftFmt);
+    }
+
+    private static void DrawChartDot(Graphics g, float x, double value, Color color)
+    {
+        double v = Math.Clamp(value, 0, 100) / 100d;
+        float y = Math.Clamp(
+            ChartRect.Bottom - (float)(ChartRect.Height * v) - 1,
+            ChartRect.Top + 1,
+            ChartRect.Bottom - 1);
+
+        using (var halo = new SolidBrush(Color.FromArgb(55, color)))
+        {
+            g.FillEllipse(halo, x - 5, y - 5, 10, 10);
+        }
+
+        using var dot = new SolidBrush(color);
+        g.FillEllipse(dot, x - 2.6f, y - 2.6f, 5.2f, 5.2f);
     }
 
     private void DrawSeries(Graphics g, double[] values, Color color, bool fillArea)
@@ -490,9 +724,11 @@ public sealed class StatusPopup : Form
         g.DrawLines(pen, points);
     }
 
-    private void DrawRows(Graphics g, Snapshot s, Verdict verdict)
+    private void DrawRows(Graphics g, Snapshot s, Verdict verdict, bool history)
     {
-        DrawText(g, "占用最高的应用", SmallFont, Theme.TextSecondary, new RectangleF(14, 278, 140, 16), LeftFmt);
+        string title = history ? "占用最高的应用（回看）" : "占用最高的应用";
+        DrawText(g, title, SmallFont, history ? Theme.Accent : Theme.TextSecondary,
+            new RectangleF(14, 278, 160, 16), LeftFmt);
         DrawText(g, "CPU", TinyFont, Theme.TextDim, new RectangleF(176, 280, 60, 14), RightFmt);
         DrawText(g, "磁盘", TinyFont, Theme.TextDim, new RectangleF(246, 280, 84, 14), RightFmt);
         DrawText(g, "内存", TinyFont, Theme.TextDim, new RectangleF(340, 280, 64, 14), RightFmt);
@@ -516,8 +752,15 @@ public sealed class StatusPopup : Form
             ProcessGroup item = top[i];
             float y = 298 + (i * 22);
             var row = new RectangleF(14, y, BaseWidth - 28, 21);
+            _rowRects.Add((item, row));
 
-            if (i % 2 == 0)
+            bool hover = _hoverRow == i;
+            if (hover)
+            {
+                using var fill = new SolidBrush(Theme.Card);
+                Theme.FillRound(g, fill, row, 5);
+            }
+            else if (i % 2 == 0)
             {
                 using var alt = new SolidBrush(Color.FromArgb(255, 27, 29, 34));
                 Theme.FillRound(g, alt, row, 5);
@@ -530,7 +773,7 @@ public sealed class StatusPopup : Form
             }
 
             DrawText(g, item.Name, BodyFont, Theme.TextPrimary,
-                new RectangleF(14, y + 2, 120, 17), LeftFmt);
+                new RectangleF(20, y + 2, 114, 17), LeftFmt);
 
             if (item.Instances > 1)
             {
@@ -619,20 +862,55 @@ public sealed class StatusPopup : Form
         }
     }
 
-    private void DrawFooter(Graphics g, bool freezeAsHeadline, Snapshot s)
+    private void DrawFooter(Graphics g, bool freezeAsHeadline, Snapshot s, bool paused)
     {
         bool showNotice = _notice is not null && DateTime.UtcNow < _noticeUntil;
         string text = showNotice
             ? _notice!
-            : freezeAsHeadline
-                ? $"现在已恢复正常 · CPU {s.CpuTotal:0}% · 磁盘 {s.DiskBusy:0}%"
-                : "托盘图标单击开关 · Esc 关闭";
+            : paused
+                ? "已暂停 · 点曲线换时刻 · Esc 恢复"
+                : freezeAsHeadline
+                    ? $"现在已恢复正常 · CPU {s.CpuTotal:0}% · 磁盘 {s.DiskBusy:0}%"
+                    : "点曲线暂停回看 · 托盘单击开关 · Esc 关";
+
+        if (paused)
+        {
+            DrawResumeButton(g);
+        }
 
         DrawText(g, text, TinyFont, showNotice ? Theme.Warn : Theme.TextDim,
-            new RectangleF(16, 558, 282, 18), LeftFmt);
+            new RectangleF(paused ? 104 : 16, 558, paused ? 190 : 282, 18), LeftFmt);
 
         DrawText(g, "资源监视器 →", SmallFont, _hoverResmon ? Theme.TextPrimary : Theme.Accent,
             ResmonRect, RightFmt);
+    }
+
+    private void DrawResumeButton(Graphics g)
+    {
+        using (var fill = new SolidBrush(_hoverResume ? Theme.Card : Theme.CardAlt))
+        {
+            Theme.FillRound(g, fill, ResumeRect, 6);
+        }
+
+        using (var border = new Pen(Color.FromArgb(_hoverResume ? 190 : 110, Theme.Accent)))
+        {
+            Theme.DrawRound(g, border, ResumeRect, 6);
+        }
+
+        float cy = ResumeRect.Y + (ResumeRect.Height / 2f);
+        using (var icon = new SolidBrush(Theme.Accent))
+        {
+            g.FillPolygon(icon, new[]
+            {
+                new PointF(ResumeRect.X + 13, cy - 4.5f),
+                new PointF(ResumeRect.X + 13, cy + 4.5f),
+                new PointF(ResumeRect.X + 20, cy),
+            });
+        }
+
+        DrawText(g, "恢复实时", SmallFont, _hoverResume ? Theme.TextPrimary : Theme.Accent,
+            new RectangleF(ResumeRect.X + 18, ResumeRect.Y, ResumeRect.Width - 20, ResumeRect.Height),
+            CenterFmt);
     }
 
     private static string FitPath(string path)
@@ -649,13 +927,30 @@ public sealed class StatusPopup : Form
             return;
         }
 
-        string? path = ResolveExecutablePath(item);
+        string? path = ResolveExecutablePath(item.Culprit, 0, item.CulpritPath);
         if (path is null)
         {
             ShowNotice($"没找到 {item.Culprit} 的程序位置，可能已经退出");
             return;
         }
 
+        RevealInExplorer(path);
+    }
+
+    private void OpenAppLocation(ProcessGroup group)
+    {
+        string? path = ResolveExecutablePath(group.Name, group.MainPid, null);
+        if (path is null)
+        {
+            ShowNotice($"没找到 {group.Name} 的程序位置，可能已经退出");
+            return;
+        }
+
+        RevealInExplorer(path);
+    }
+
+    private void RevealInExplorer(string path)
+    {
         try
         {
             Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
@@ -674,22 +969,39 @@ public sealed class StatusPopup : Form
         Invalidate();
     }
 
-    private static string? ResolveExecutablePath(IncidentRecord item)
+    private static string? ResolveExecutablePath(string name, int pid, string? recordedPath)
     {
-        if (!string.IsNullOrWhiteSpace(item.CulpritPath) && File.Exists(item.CulpritPath))
+        if (!string.IsNullOrWhiteSpace(recordedPath) && File.Exists(recordedPath))
         {
-            return item.CulpritPath;
+            return recordedPath;
         }
 
-        if (string.IsNullOrWhiteSpace(item.Culprit) || item.Culprit == "未知")
+        if (string.IsNullOrWhiteSpace(name) || name == "未知")
         {
             return null;
+        }
+
+        if (pid > 0)
+        {
+            try
+            {
+                using Process exact = Process.GetProcessById(pid);
+                string? exactPath = exact.MainModule?.FileName;
+                if (!string.IsNullOrWhiteSpace(exactPath) && File.Exists(exactPath))
+                {
+                    return exactPath;
+                }
+            }
+            catch
+            {
+                // 进程已退出或受保护，按名字再找一遍。
+            }
         }
 
         Process[] processes;
         try
         {
-            processes = Process.GetProcessesByName(item.Culprit);
+            processes = Process.GetProcessesByName(name);
         }
         catch
         {
