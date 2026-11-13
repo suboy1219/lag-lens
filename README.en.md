@@ -25,6 +25,7 @@ So LagLens samples every second, keeps the last 60 seconds in memory, and record
 - **The tray icon is the status**: green = fine, orange = busy, red = struggling; it **stays red while an incident is unread**
 - **No popups, ever**: it never steals focus, it only changes the tray color
 - **Automatic incident log**: freezes and sustained high pressure are written to disk; the panel shows the latest three
+- **Click to locate**: click any incident to open the culprit's folder in Explorer with the exe selected
 - **Start with Windows**, plus a shortcut to Resource Monitor
 
 ## Screenshots
@@ -88,11 +89,14 @@ LagLens.exe --shot <png path>   sample for 15s, then render the panel to PNG (do
 
 Records live in `%LOCALAPPDATA%\LagLens\incidents.json`, capped at 200 entries and kept across restarts.
 
+The panel shows the latest three: the app name and duration/peak on the first line, time and exe path on the second. Clicking one opens its folder in Explorer with the file selected (`explorer /select`). If an older record has no stored path, LagLens falls back to looking up a running process with the same name.
+
 | Field | Meaning |
 | --- | --- |
 | `Kind` | `冻结` (freeze) / `高压` (sustained pressure) |
 | `Seconds` | duration |
 | `Culprit` | busiest process name at the time |
+| `CulpritPath` | full path to the culprit exe, used for click-to-locate |
 | `Resource` | `CPU` / `磁盘` (disk) / `内存` (memory) |
 | `Peak` | culprit's peak value (percent / MB/s / MB) |
 | `Cpu` / `DiskBusy` / `DiskLatencyMs` | system peaks during the episode |

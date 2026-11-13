@@ -197,7 +197,7 @@ public sealed class StatusPopup : Form
         }
 
         int incident = HitIncident(p);
-        if (incident >= 0)
+        if (e.Button == MouseButtons.Left && incident >= 0)
         {
             OpenIncidentLocation(_incidentRects[incident].Record);
             return;
@@ -461,7 +461,10 @@ public sealed class StatusPopup : Form
             double v = Math.Clamp(values[i], 0, 100) / 100d;
             points[i] = new PointF(
                 ChartRect.X + (i * stepX),
-                ChartRect.Bottom - (float)(ChartRect.Height * v) - 1);
+                Math.Clamp(
+                    ChartRect.Bottom - (float)(ChartRect.Height * v) - 1,
+                    ChartRect.Top + 1,
+                    ChartRect.Bottom - 1));
         }
 
         if (fillArea)
@@ -555,8 +558,6 @@ public sealed class StatusPopup : Form
     private void DrawIncidents(Graphics g)
     {
         DrawText(g, "最近卡顿", SmallFont, Theme.TextSecondary, new RectangleF(14, 410, 140, 16), LeftFmt);
-        DrawText(g, "点击定位程序", TinyFont, Theme.TextDim,
-            new RectangleF(BaseWidth - 128, 411, 114, 15), RightFmt);
 
         IReadOnlyList<IncidentRecord> items = _sampler.Store.Recent(3);
         if (items.Count == 0)
@@ -565,6 +566,9 @@ public sealed class StatusPopup : Form
                 new RectangleF(16, IncidentTop + 8, 300, 16), LeftFmt);
             return;
         }
+
+        DrawText(g, "点击定位程序", TinyFont, Theme.TextDim,
+            new RectangleF(BaseWidth - 128, 411, 114, 15), RightFmt);
 
         for (int i = 0; i < items.Count; i++)
         {
@@ -639,6 +643,12 @@ public sealed class StatusPopup : Form
 
     private void OpenIncidentLocation(IncidentRecord item)
     {
+        if (string.IsNullOrWhiteSpace(item.Culprit) || item.Culprit == "未知")
+        {
+            ShowNotice("这条记录没抓到具体进程，无法定位");
+            return;
+        }
+
         string? path = ResolveExecutablePath(item);
         if (path is null)
         {
