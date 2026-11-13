@@ -270,6 +270,7 @@ public sealed class StatusPopup : Form
 
         Snapshot? s = _sampler.Latest;
         _lastPaintAt = DateTime.UtcNow;
+        _incidentRects.Clear();
         IReadOnlyList<Snapshot> history = _sampler.History();
         FreezeEvent? freeze = _sampler.LastFreeze();
 
@@ -553,40 +554,165 @@ public sealed class StatusPopup : Form
 
     private void DrawIncidents(Graphics g)
     {
-        DrawText(g, "最近卡顿", SmallFont, Theme.TextSecondary, new RectangleF(14, 412, 140, 16), LeftFmt);
+        DrawText(g, "最近卡顿", SmallFont, Theme.TextSecondary, new RectangleF(14, 410, 140, 16), LeftFmt);
+        DrawText(g, "点击定位程序", TinyFont, Theme.TextDim,
+            new RectangleF(BaseWidth - 128, 411, 114, 15), RightFmt);
 
         IReadOnlyList<IncidentRecord> items = _sampler.Store.Recent(3);
         if (items.Count == 0)
         {
             DrawText(g, "还没有记录到卡顿", TinyFont, Theme.TextDim,
-                new RectangleF(16, 432, 300, 16), LeftFmt);
+                new RectangleF(16, IncidentTop + 8, 300, 16), LeftFmt);
             return;
         }
 
         for (int i = 0; i < items.Count; i++)
         {
             IncidentRecord item = items[i];
-            float y = 430 + (i * 20);
+            float y = IncidentTop + (i * IncidentRowHeight);
+            var row = new RectangleF(14, y, BaseWidth - 28, IncidentRowHeight - 4);
+            _incidentRects.Add((item, row));
 
-            DrawText(g, $"{item.At:MM-dd HH:mm}", TinyFont, Theme.TextDim,
-                new RectangleF(16, y, 78, 16), LeftFmt);
+            bool hover = _hoverIncident == i;
+            using (var fill = new SolidBrush(hover ? Theme.Card : Theme.CardAlt))
+            {
+                Theme.FillRound(g, fill, row, 6);
+            }
 
-            Color color = item.Kind == "冻结" ? Theme.Warn : Theme.TextSecondary;
-            DrawText(g, item.Summary(), TinyFont, color,
-                new RectangleF(96, y, BaseWidth - 112, 16), LeftFmt);
+            Color accent = item.Resource switch
+            {
+                "CPU" => Theme.Accent,
+                "磁盘" => Theme.Warn,
+                "内存" => Theme.Ok,
+                _ => Theme.TextDim,
+            };
+
+            using (var bar = new SolidBrush(Color.FromArgb(hover ? 255 : 190, accent)))
+            {
+                g.FillRectangle(bar, row.X + 4, row.Y + 8, 3, row.Height - 16);
+            }
+
+            string name = string.IsNullOrWhiteSpace(item.Culprit) || item.Culprit == "未知"
+                ? "未知进程"
+                : item.Culprit;
+            DrawText(g, name, NameFont, Theme.TextPrimary, new RectangleF(16, y + 2, 236, 18), LeftFmt);
+
+            string duration = item.Kind == "冻结" ? $"卡了 {item.Seconds:0.#}s" : $"高压 {item.Seconds:0}s";
+            string metric = item.Resource switch
+            {
+                "CPU" => $"{item.Peak:0}% CPU",
+                "磁盘" => $"{item.Peak:0.#} MB/s",
+                "内存" => $"{item.Peak:0} MB",
+                _ => string.Empty,
+            };
+            string right = metric.Length > 0 ? $"{duration} · {metric}" : duration;
+            DrawText(g, right, MetricFont, accent, new RectangleF(252, y + 3, 152, 17), RightFmt);
+
+            string sub = string.IsNullOrWhiteSpace(item.CulpritPath)
+                ? $"{item.At:MM-dd HH:mm} · 路径未记录，可按进程名查找"
+                : $"{item.At:MM-dd HH:mm} · {FitPath(item.CulpritPath)}";
+            DrawText(g, sub, TinyFont, Theme.TextDim, new RectangleF(16, y + 20, BaseWidth - 30, 15), LeftFmt);
         }
     }
 
     private void DrawFooter(Graphics g, bool freezeAsHeadline, Snapshot s)
     {
-        string text = freezeAsHeadline
-            ? $"现在已恢复正常 · CPU {s.CpuTotal:0}% · 磁盘 {s.DiskBusy:0}%"
-            : "托盘图标单击开关 · Esc 关闭";
+        bool showNotice = _notice is not null && DateTime.UtcNow < _noticeUntil;
+        string text = showNotice
+            ? _notice!
+            : freezeAsHeadline
+                ? $"现在已恢复正常 · CPU {s.CpuTotal:0}% · 磁盘 {s.DiskBusy:0}%"
+                : "托盘图标单击开关 · Esc 关闭";
 
-        DrawText(g, text, TinyFont, Theme.TextDim, new RectangleF(16, 496, 280, 18), LeftFmt);
+        DrawText(g, text, TinyFont, showNotice ? Theme.Warn : Theme.TextDim,
+            new RectangleF(16, 558, 282, 18), LeftFmt);
 
         DrawText(g, "资源监视器 →", SmallFont, _hoverResmon ? Theme.TextPrimary : Theme.Accent,
             ResmonRect, RightFmt);
+    }
+
+    private static string FitPath(string path)
+    {
+        const int max = 56;
+        return path.Length <= max ? path : "…" + path[^(max - 1)..];
+    }
+
+    private void OpenIncidentLocation(IncidentRecord item)
+    {
+        string? path = ResolveExecutablePath(item);
+        if (path is null)
+        {
+            ShowNotice($"没找到 {item.Culprit} 的程序位置，可能已经退出");
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+            ShowNotice($"已定位到 {Path.GetFileName(path)}");
+        }
+        catch (Exception ex)
+        {
+            ShowNotice($"打开目录失败：{ex.Message}");
+        }
+    }
+
+    private void ShowNotice(string text)
+    {
+        _notice = text;
+        _noticeUntil = DateTime.UtcNow.AddSeconds(4);
+        Invalidate();
+    }
+
+    private static string? ResolveExecutablePath(IncidentRecord item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.CulpritPath) && File.Exists(item.CulpritPath))
+        {
+            return item.CulpritPath;
+        }
+
+        if (string.IsNullOrWhiteSpace(item.Culprit) || item.Culprit == "未知")
+        {
+            return null;
+        }
+
+        Process[] processes;
+        try
+        {
+            processes = Process.GetProcessesByName(item.Culprit);
+        }
+        catch
+        {
+            return null;
+        }
+
+        try
+        {
+            foreach (Process p in processes)
+            {
+                try
+                {
+                    string? path = p.MainModule?.FileName;
+                    if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                    {
+                        return path;
+                    }
+                }
+                catch
+                {
+                    // 受保护进程读不到路径，换下一个同名进程。
+                }
+            }
+        }
+        finally
+        {
+            foreach (Process p in processes)
+            {
+                p.Dispose();
+            }
+        }
+
+        return null;
     }
 
     private static void DrawText(Graphics g, string text, Font font, Color color, RectangleF rect, StringFormat format)
