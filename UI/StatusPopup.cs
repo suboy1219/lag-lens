@@ -155,6 +155,18 @@ public sealed class StatusPopup : Form
         }
     }
 
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        // 方向键默认属于 WinForms 导航键，在这里处理才能可靠收到。
+        if (keyData is Keys.Left or Keys.Right)
+        {
+            StepFrame(keyData == Keys.Left ? -1 : 1);
+            return true;
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         if (e.KeyCode == Keys.Escape)
@@ -281,6 +293,30 @@ public sealed class StatusPopup : Form
 
     /// <summary>当前时间轴上的样本数：暂停后看冻结的副本，否则看实时历史。</summary>
     private int ChartCount() => _pausedHistory?.Length ?? _sampler.History().Count;
+
+    private void StepFrame(int direction)
+    {
+        Snapshot[] history = _pausedHistory ?? _sampler.History().ToArray();
+        if (history.Length == 0)
+        {
+            return;
+        }
+
+        // 优先从暂停选中帧移动，其次是悬停预览帧；实时状态从最新帧开始。
+        int current = _pausedAt is DateTime at
+            ? Array.FindIndex(history, s => s.At == at)
+            : _hoverChart;
+        if (current < 0 || current >= history.Length)
+        {
+            current = history.Length - 1;
+        }
+
+        int next = Math.Clamp(current + direction, 0, history.Length - 1);
+        _pausedHistory = history;
+        _pausedAt = history[next].At;
+        _hoverChart = next;
+        Invalidate();
+    }
 
     private void ResumeLive()
     {
@@ -868,7 +904,7 @@ public sealed class StatusPopup : Form
         string text = showNotice
             ? _notice!
             : paused
-                ? "已暂停 · 点曲线换时刻 · Esc 恢复"
+                ? "←/→ 逐帧 · Esc 恢复"
                 : freezeAsHeadline
                     ? $"现在已恢复正常 · CPU {s.CpuTotal:0}% · 磁盘 {s.DiskBusy:0}%"
                     : "点曲线暂停回看 · 托盘单击开关 · Esc 关";

@@ -20,7 +20,7 @@ So LagLens samples every second, keeps the last 60 seconds in memory, and record
 
 - **One-line verdict**: `Disk can't keep up` / `CPU is maxed out` / `Running out of memory` / `Everything looks smooth`
 - **Three live metrics**: CPU usage, busiest physical disk utilization, available memory
-- **Pausable 60-second chart**: hover to preview any second, click to pause the whole panel on that moment; press "Resume live" or `Esc` to continue
+- **Pausable 60-second chart**: hover to preview any second, click to pause the whole panel on that moment; press `←` / `→` to step to the previous / next frame (usually about one second), stopping at either end; press "Resume live" or `Esc` to continue
 - **Top 5 apps** aggregated by process name, so `Code ×12` counts all 12 processes together; click any row to reveal the program in Explorer
 - **The tray icon is the status**: updated every second from the current load; green = fine, orange = busy, red = struggling. Its color recovers automatically, and unread incidents appear in the tooltip
 - **No popups, ever**: it never steals focus, it only changes the tray color
@@ -67,11 +67,29 @@ If several thresholds are crossed, the one furthest past its threshold becomes t
 
 `Pages/sec` includes file cache activity and can spike into the thousands on a mostly idle 32GB machine. LagLens uses **available memory + commit ratio** instead.
 
+### What does IOPS mean?
+
+IOPS means input/output operations per second. `50 IOPS` means the app performs about 50 reads and writes per second; `MB/s` measures the amount of data transferred per second. The app list shows IOPS when throughput is below 0.1 MB/s and there is still I/O activity, making small, frequent operations visible.
+
+These are process I/O counters aggregated by app, including cache hits and network I/O. They are not a count of completed physical disk operations. Use disk latency and queue depth to assess whether the disk is causing a stutter.
+
 ## Usage
 
+Download the Windows x64 ZIP from [GitHub Releases](https://github.com/suboy1219/lag-lens/releases/latest), extract it, and run the app; the .NET runtime is included. Before updating, exit the old version from its tray menu, then replace the program.
+
 1. Double-click `LagLens.exe`; the icon appears in the notification area.
-2. Left click: toggle the panel; `Esc` or `×` closes it. While the panel is open, hover the chart to preview any second and click to pause; use "Resume live" or the first `Esc` to continue, the second `Esc` closes the panel. Clicking a top-5 row reveals the program in Explorer.
+2. Left click: toggle the panel. Hover the chart to preview a moment and click to pause; press `←` / `→` to select the previous / next frame, updating the metrics and top-5 apps together. Clicking a top-5 row reveals the program in Explorer.
 3. Right click: open panel / start with Windows / open Resource Monitor / exit.
+
+| Action | Behavior |
+| --- | --- |
+| `←` / `→` | Move one sample backward / forward, usually about one second; stop at the oldest / newest frame without wrapping |
+| Arrow keys while live | Start from the hovered preview, or the latest frame if there is no preview, and pause the timeline |
+| Click the chart while paused | Select another frame and stay paused |
+| "Resume live" or `Esc` while paused | Return to the live view |
+| `Esc` while live, or `×` at any time | Close the panel |
+
+Pausing keeps a copy of the current timeline so new samples cannot displace the selected frame. Resuming shows the latest data. A system freeze can leave more than one second between samples.
 
 Opening the panel marks incidents as read and clears the unread count from the tray tooltip; the icon color always follows the current load. No administrator rights required. Windows 10 / 11 x64.
 
