@@ -14,7 +14,7 @@ The hard part of diagnosing a stutter is not the data, it's the **timing**:
 - Task Manager does not show disk latency or queue depth; Resource Monitor does, but you have to dig for it and interpret it yourself. An NVMe drive at 100% utilization with 1ms latency feels fine; a spinning disk at 100% with 80ms latency makes the mouse stutter.
 - Paging, drivers and antivirus scanning happen in kernel mode, so Task Manager cannot attribute them to an app.
 
-So LagLens samples every second, keeps the last 60 seconds in memory, and records the moment the system froze. Open it after the stutter and you see "it froze for 4 seconds, and BuildAgent was eating the CPU", not "everything looks fine now".
+So LagLens samples every second, keeps the last 60 seconds in memory, and records the moment the system froze. Open it after the stutter and you see "it froze for 4 seconds, and Chrome was eating the CPU", not "everything looks fine now".
 
 ## Features
 
@@ -41,7 +41,7 @@ The three tray states:
 
 ![Tray states](docs/images/tray-states.png)
 
-> BuildAgent / BackupAgent and the 4-second freeze in the screenshots are demo scenarios staged for the docs. Every number in the panel is real sampled data.
+> Screenshots use simulated data to demonstrate freezes, high CPU usage, and a busy disk. App names and paths are examples of common software; no actual usage records or local machine paths are included.
 
 ## How the verdict is made
 
