@@ -1,5 +1,7 @@
 # 卡顿侦探 · LagLens
 
+官网: [https://suboy1219.github.io/suboy](https://suboy1219.github.io/suboy)
+
 常驻 Windows 托盘的小工具。电脑突然卡的时候点一下托盘图标，直接告诉你**是谁**在吃资源、**是 CPU 还是硬盘**扛不住了。
 
 ![卡顿面板](docs/images/demo-panel-freeze.png)

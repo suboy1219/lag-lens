@@ -1,5 +1,7 @@
 # LagLens
 
+官网: [https://suboy1219.github.io/suboy](https://suboy1219.github.io/suboy)
+
 A tiny Windows tray app for the moment your PC suddenly stutters. Click the tray icon and it tells you **who** is hogging the machine and **whether the CPU or the disk** is the bottleneck.
 
 ![LagLens panel](docs/images/demo-panel-freeze.png)
