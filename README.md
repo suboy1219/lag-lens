@@ -153,3 +153,7 @@ dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile
 ---
 
 [English README](README.en.md)
+
+## 检测更新
+
+右键系统托盘图标，选择 **帮助 → 检测更新**。程序会比较当前版本和本项目 GitHub 最新正式发布版；发现新版后可选择打开发布页下载。无正式发布版或网络失败时会显示提示。

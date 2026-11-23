@@ -75,6 +75,7 @@ public sealed class TrayContext : ApplicationContext
         menu.Items.Add(_startupItem);
         menu.Items.Add(new ToolStripMenuItem("打开资源监视器", null, (_, _) => OpenResmon()));
         menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(HelpMenu.Create());
         menu.Items.Add(new ToolStripMenuItem("退出", null, (_, _) => ExitApp()));
         return menu;
     }

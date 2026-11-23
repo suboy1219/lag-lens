@@ -154,3 +154,7 @@ Everything stays in local memory and `%LOCALAPPDATA%\LagLens\`. No network acces
 ---
 
 [中文 README](README.md)
+
+## Check for updates
+
+Right-click the system tray icon and choose **Help → Check for updates** (帮助 → 检测更新). The app compares its version with the latest stable GitHub release and offers to open the release page when an update is available. It also reports missing releases and connection errors.
