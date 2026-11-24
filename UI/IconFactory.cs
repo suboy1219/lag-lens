@@ -21,11 +21,18 @@ internal static class IconFactory
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.Clear(Color.Transparent);
 
-            using var ringPen = new Pen(color, 4.5f);
-            g.DrawEllipse(ringPen, 6.5f, 6.5f, 19f, 19f);
-
-            using var dot = new SolidBrush(color);
-            g.FillEllipse(dot, 12f, 12f, 8f, 8f);
+            // A solid bolt stays recognizable at tray size, including in grayscale.
+            // Keep the load color while distinguishing it from EyeGuard's ring.
+            using var bolt = new SolidBrush(color);
+            g.FillPolygon(bolt,
+            [
+                new PointF(18f, 2f),
+                new PointF(5f, 18f),
+                new PointF(14f, 18f),
+                new PointF(11f, 30f),
+                new PointF(27f, 12f),
+                new PointF(18f, 12f),
+            ]);
         }
 
         IntPtr handle = bmp.GetHicon();
